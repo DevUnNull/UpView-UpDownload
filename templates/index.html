@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UpView Bot Pro - Web Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #0a0e17;
+            --bg-card: rgba(18, 24, 38, 0.75);
+            --bg-input: #0f172a;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(56, 189, 248, 0.3);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.35);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.35);
+            --danger: #ef4444;
+            --danger-glow: rgba(239, 68, 68, 0.35);
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.07) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.07) 0%, transparent 40%);
+            padding: 24px 16px;
+        }
+
+        .container {
+            max-width: 1050px;
+            margin: 0 auto;
+        }
+
+        /* Top Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 16px var(--primary-glow);
+        }
+
+        .brand-title h1 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #f8fafc, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-title p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-muted);
+        }
+
+        .status-badge.idle .status-dot {
+            background-color: #64748b;
+        }
+
+        .status-badge.running {
+            border-color: rgba(16, 185, 129, 0.4);
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+        }
+
+        .status-badge.running .status-dot {
+            background-color: var(--success);
+            box-shadow: 0 0 8px var(--success);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px 20px;
+            backdrop-filter: blur(12px);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            margin-top: 6px;
+            color: var(--text-main);
+            font-feature-settings: "tnum";
+        }
+
+        .stat-value.primary { color: var(--primary); }
+        .stat-value.success { color: var(--success); }
+        .stat-value.danger { color: var(--danger); }
+
+        /* Progress Section */
+        .progress-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .progress-track {
+            height: 10px;
+            background: #1e293b;
+            border-radius: 99px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #38bdf8, #10b981);
+            border-radius: 99px;
+            transition: width 0.4s ease;
+        }
+
+        /* Main Workspace Grid */
+        .workspace {
+            display: grid;
+            grid-template-columns: 1.1fr 1.4fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 860px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 22px;
+            backdrop-filter: blur(14px);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-main);
+            padding: 11px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 18px 0;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-main);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-label input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        /* Action Buttons */
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        button {
+            border: none;
+            border-radius: 12px;
+            padding: 13px 18px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #ffffff;
+            box-shadow: 0 4px 16px var(--success-glow);
+        }
+
+        .btn-start:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #ffffff;
+            box-shadow: 0 4px 16px var(--danger-glow);
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Terminal Console */
+        .terminal-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .btn-clear {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 5px 12px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+
+        .btn-clear:hover {
+            color: var(--text-main);
+            border-color: var(--text-muted);
+        }
+
+        .terminal-screen {
+            background: #060911;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 16px;
+            height: 380px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', Consolas, monospace;
+            font-size: 12.5px;
+            line-height: 1.6;
+            color: #67e8f9;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .log-entry.download { color: #c084fc; font-weight: 600; }
+        .log-entry.success { color: #34d399; }
+        .log-entry.error { color: #f87171; }
+        .log-entry.info { color: #38bdf8; }
+        .log-entry.warn { color: #fbbf24; }
+        .log-entry.dim { color: #64748b; }
+
+        /* Scrollbar */
+        .terminal-screen::-webkit-scrollbar {
+            width: 6px;
+        }
+        .terminal-screen::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .terminal-screen::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Top Navigation / Header -->
+        <header class="header">
+            <div class="brand-title">
+                <div class="logo-icon">⚡</div>
+                <div>
+                    <h1>UpView Bot Dashboard</h1>
+                    <p>Hệ thống tự động hóa cày view Selenium Headless</p>
+                </div>
+            </div>
+            <div id="statusBadge" class="status-badge idle">
+                <span class="status-dot"></span>
+                <span id="statusText">Sẵn sàng</span>
+            </div>
+        </header>
+
+        <!-- Stats Overview Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Tổng View Cấu Hình</div>
+                <div id="statTotal" class="stat-value primary">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Lượt Hoàn Tất</div>
+                <div id="statSuccess" class="stat-value success">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Lượt Tải (Downloads)</div>
+                <div id="statDownload" class="stat-value" style="color: #c084fc;">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Lượt Thất Bại</div>
+                <div id="statFail" class="stat-value danger">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tỉ Lệ Thành Công</div>
+                <div id="statRate" class="stat-value">0%</div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-box">
+            <div class="progress-header">
+                <span>Tiến Độ Chiến Dịch</span>
+                <span id="progressText">0 / 0</span>
+            </div>
+            <div class="progress-track">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- Configuration Form -->
+            <div class="card">
+                <h2 class="card-title">⚙️ Cấu Hình Chiến Dịch</h2>
+                
+                <div class="form-group">
+                    <label for="url">Link Website Mục Tiêu (URL):</label>
+                    <input type="text" id="url" placeholder="https://your-website.com" value="https://example.com">
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="sessions">Tổng Số View:</label>
+                        <input type="number" id="sessions" min="1" max="10000" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="minWait">Chờ Tối Thiểu (s):</label>
+                        <input type="number" id="minWait" min="1" step="0.5" value="8.0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxWait">Chờ Tối Đa (s):</label>
+                    <input type="number" id="maxWait" min="1" step="0.5" value="15.0">
+                </div>
+
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="headless" checked>
+                        <span>Chạy ngầm (Headless) - Tiết kiệm RAM/CPU</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="scroll" checked>
+                        <span>Giả lập cuộn trang đọc bài (Human scroll)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="download" checked>
+                        <span style="color: #c084fc; font-weight: 600;">📥 Tự động click Download (Tăng lượt tải Itch.io)</span>
+                    </label>
+                </div>
+
+                <div class="form-group" style="margin-top: 14px;">
+                    <label for="proxies" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>🌐 Proxy Xoay Vòng IP (Tùy chọn cho Itch.io):</span>
+                        <span style="font-size: 11px; color: var(--primary);">Mỗi proxy 1 dòng</span>
+                    </label>
+                    <textarea id="proxies" placeholder="Để trống nếu chạy mạng trực tiếp (Direct IP)&#10;Hoặc nhập danh sách proxy:&#10;103.152.112.162:8080&#10;142.93.12.34:3128" rows="3" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; color: var(--text-main); padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; resize: vertical; outline: none;"></textarea>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">💡 Chế độ Ẩn danh (Incognito), che giấu Automation, đổi User-Agent và ngắt kết nối sạch giữa các phiên luôn được bật tự động.</p>
+                </div>
+
+                <div class="btn-group">
+                    <button id="btnStart" class="btn-start" onclick="startCampaign()">
+                        <span>▶</span> Bắt Đầu Chạy
+                    </button>
+                    <button id="btnStop" class="btn-stop" onclick="stopCampaign()" disabled>
+                        <span>■</span> Dừng Lại
+                    </button>
+                </div>
+            </div>
+
+            <!-- Live Logs Terminal -->
+            <div class="card terminal-container">
+                <div class="terminal-header">
+                    <h2 class="card-title" style="margin-bottom: 0;">📜 Nhật Ký Hoạt Động</h2>
+                    <button class="btn-clear" onclick="clearLogs()">Xóa Log</button>
+                </div>
+                <div id="terminalScreen" class="terminal-screen">
+                    <div class="log-entry dim">[*] Hệ thống đã sẵn sàng. Nhập URL và nhấn "Bắt Đầu Chạy" để khởi động.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isPolling = false;
+        let pollInterval = null;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                // Cập nhật số liệu
+                document.getElementById('statTotal').innerText = data.total_views;
+                document.getElementById('statSuccess').innerText = data.success_count;
+                document.getElementById('statDownload').innerText = data.download_count || 0;
+                document.getElementById('statFail').innerText = data.fail_count;
+
+                const completed = data.success_count + data.fail_count;
+                const rate = completed > 0 ? Math.round((data.success_count / completed) * 100) : 0;
+                document.getElementById('statRate').innerText = `${rate}%`;
+
+                // Cập nhật progress bar
+                const pct = data.total_views > 0 ? Math.min(100, Math.round((completed / data.total_views) * 100)) : 0;
+                document.getElementById('progressFill').style.width = `${pct}%`;
+                document.getElementById('progressText').innerText = `${completed} / ${data.total_views} (${pct}%)`;
+
+                // Cập nhật trạng thái
+                const badge = document.getElementById('statusBadge');
+                const badgeText = document.getElementById('statusText');
+                const btnStart = document.getElementById('btnStart');
+                const btnStop = document.getElementById('btnStop');
+
+                if (data.is_running) {
+                    badge.className = 'status-badge running';
+                    badgeText.innerText = `Đang chạy (${data.current_view}/${data.total_views})`;
+                    btnStart.disabled = true;
+                    btnStop.disabled = false;
+                } else {
+                    badge.className = 'status-badge idle';
+                    badgeText.innerText = 'Sẵn sàng';
+                    btnStart.disabled = false;
+                    btnStop.disabled = true;
+                }
+
+                // Cập nhật log
+                if (data.logs && data.logs.length > 0) {
+                    const term = document.getElementById('terminalScreen');
+                    term.innerHTML = '';
+                    data.logs.forEach(msg => {
+                        const div = document.createElement('div');
+                        div.className = 'log-entry';
+                        if (msg.includes('[📥]')) div.className += ' download';
+                        else if (msg.includes('[+]')) div.className += ' success';
+                        else if (msg.includes('[!]')) div.className += ' error';
+                        else if (msg.includes('[*]')) div.className += ' info';
+                        else if (msg.includes('[-]')) div.className += ' warn';
+                        div.innerText = msg;
+                        term.appendChild(div);
+                    });
+                    term.scrollTop = term.scrollHeight;
+                }
+            } catch (err) {
+                console.error("Lỗi cập nhật:", err);
+            }
+        }
+
+        async function startCampaign() {
+            const url = document.getElementById('url').value.trim();
+            const sessions = parseInt(document.getElementById('sessions').value);
+            const minWait = parseFloat(document.getElementById('minWait').value);
+            const maxWait = parseFloat(document.getElementById('maxWait').value);
+            const headless = document.getElementById('headless').checked;
+            const scroll = document.getElementById('scroll').checked;
+            const download = document.getElementById('download') ? document.getElementById('download').checked : true;
+            const proxies = document.getElementById('proxies') ? document.getElementById('proxies').value.trim() : '';
+
+            if (!url || url === 'https://example.com') {
+                alert('Vui lòng nhập link website mục tiêu hợp lệ!');
+                return;
+            }
+
+            if (minWait > maxWait) {
+                alert('Thời gian tối thiểu không được lớn hơn thời gian tối đa!');
+                return;
+            }
+
+            const btnStart = document.getElementById('btnStart');
+            btnStart.disabled = true;
+
+            try {
+                const res = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: url,
+                        total_sessions: sessions,
+                        min_wait: minWait,
+                        max_wait: maxWait,
+                        headless: headless,
+                        scroll: scroll,
+                        download: download,
+                        proxies: proxies
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Không thể bắt đầu!');
+                    btnStart.disabled = false;
+                } else {
+                    if (!pollInterval) {
+                        pollInterval = setInterval(fetchStatus, 1000);
+                    }
+                    fetchStatus();
+                }
+            } catch (e) {
+                alert('Lỗi kết nối tới server!');
+                btnStart.disabled = false;
+            }
+        }
+
+        async function stopCampaign() {
+            try {
+                await fetch('/api/stop', { method: 'POST' });
+                fetchStatus();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function clearLogs() {
+            try {
+                await fetch('/api/clear_logs', { method: 'POST' });
+                document.getElementById('terminalScreen').innerHTML = '<div class="log-entry dim">[*] Đã xóa lịch sử log.</div>';
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Tự động kiểm tra trạng thái mỗi giây
+        pollInterval = setInterval(fetchStatus, 1200);
+        fetchStatus();
+    </script>
+</body>
+</html>
