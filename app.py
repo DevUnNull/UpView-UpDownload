@@ -33,6 +33,7 @@ except ImportError:
     sys.exit(1)
 
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # Danh sách User-Agent đa dạng giả lập nhiều dòng máy & trình duyệt thực
 USER_AGENTS = [
