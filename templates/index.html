@@ -401,6 +401,7 @@
 
         .log-entry.download { color: #c084fc; font-weight: 600; }
         .log-entry.comment { color: #f59e0b; font-weight: 600; }
+        .log-entry.cookie { color: #38bdf8; font-weight: 600; }
         .log-entry.success { color: #34d399; }
         .log-entry.error { color: #f87171; }
         .log-entry.info { color: #38bdf8; }
@@ -524,12 +525,34 @@
 
                 <!-- Custom Comments Container (Collapsible) -->
                 <div id="commentBoxContainer" class="form-group" style="display: none; margin-top: 10px;">
-                    <label for="comments" style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>💬 Danh Sách Bình Luận (Mỗi dòng 1 câu):</span>
-                        <span style="font-size: 11px; color: #f59e0b;">Để trống sẽ dùng bình luận mẫu</span>
-                    </label>
-                    <textarea id="comments" rows="3" placeholder="Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.&#10;Đồ họa và cơ chế chơi tuyệt vời, rất đáng trải nghiệm!&#10;Mình rất thích ý tưởng này, cố lên tác giả ơi!&#10;Awesome game! Really enjoyed playing it." style="width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; color: var(--text-main); padding: 10px 12px; font-family: inherit; font-size: 13px; resize: vertical; outline: none;"></textarea>
-                    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">💡 <strong>Lưu ý:</strong> Trên Itch.io, trang game cần bật <em>"Allow anonymous comments"</em> trong mục Project Settings để khách không cần đăng nhập vẫn bình luận được.</p>
+                    <!-- Cookie Input Field -->
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="cookies" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: #38bdf8; font-weight: 700;">🍪 Cookie Đăng Nhập Itch.io (Bắt buộc để comment):</span>
+                            <button type="button" onclick="toggleCookieGuide()" style="background: none; border: none; color: #38bdf8; font-size: 11px; padding: 0; cursor: pointer; text-decoration: underline;">
+                                📖 Hướng dẫn lấy Cookie (10s)
+                            </button>
+                        </label>
+                        <textarea id="cookies" rows="2" placeholder="Dán cookie 'itchio' của bạn vào đây (vd: itchio=WyJ... hoặc chỉ cần chuỗi mã token)&#10;Hỗ trợ nhiều tài khoản: mỗi dòng 1 cookie" style="width: 100%; background: var(--bg-input); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 10px; color: var(--text-main); padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; resize: vertical; outline: none;"></textarea>
+                        
+                        <!-- Collapsible Cookie Guide -->
+                        <div id="cookieGuide" style="display: none; margin-top: 8px; padding: 10px 14px; background: rgba(15, 23, 42, 0.85); border: 1px dashed rgba(56, 189, 248, 0.35); border-radius: 8px; font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+                            <strong style="color: #38bdf8;">📌 3 bước lấy Cookie trên trình duyệt đã đăng nhập Itch.io:</strong><br>
+                            1. Mở trang <a href="https://itch.io" target="_blank" style="color: #38bdf8; text-decoration: underline;">itch.io</a> trên trình duyệt (Chrome, Edge, Cốc Cốc...) đã đăng nhập tài khoản.<br>
+                            2. Bấm phím <code>F12</code> (hoặc chuột phải -> <em>Kiểm tra / Inspect</em>) -> Chuyển sang tab <strong>Application</strong> (hoặc <strong>Lưu trữ / Storage</strong> trên Safari/Firefox).<br>
+                            3. Ở cột bên trái, mở mục <strong>Cookies</strong> -> chọn <code>https://itch.io</code> -> Tìm dòng <strong>itchio</strong> -> Nhấp đúp vào cột <strong>Value</strong> và copy dán vào ô bên trên.<br>
+                            <em>* Mẹo: Boss man có thể nạp nhiều dòng Cookie khác nhau để bot tự động xoay vòng bình luận từ nhiều tài khoản!</em>
+                        </div>
+                    </div>
+
+                    <!-- Custom Comments List -->
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="comments" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>💬 Danh Sách Bình Luận (Mỗi dòng 1 câu):</span>
+                            <span style="font-size: 11px; color: #f59e0b;">Để trống sẽ dùng danh sách mẫu</span>
+                        </label>
+                        <textarea id="comments" rows="3" placeholder="Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.&#10;Đồ họa và cơ chế chơi tuyệt vời, rất đáng trải nghiệm!&#10;Mình rất thích ý tưởng này, cố lên tác giả ơi!&#10;Awesome game! Really enjoyed playing it." style="width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; color: var(--text-main); padding: 10px 12px; font-family: inherit; font-size: 13px; resize: vertical; outline: none;"></textarea>
+                    </div>
                 </div>
 
                 <div class="form-group" style="margin-top: 14px;">
@@ -573,6 +596,13 @@
             const box = document.getElementById('commentBoxContainer');
             if (box) {
                 box.style.display = chk && chk.checked ? 'block' : 'none';
+            }
+        }
+
+        function toggleCookieGuide() {
+            const guide = document.getElementById('cookieGuide');
+            if (guide) {
+                guide.style.display = guide.style.display === 'none' ? 'block' : 'none';
             }
         }
 
@@ -624,6 +654,8 @@
                         div.className = 'log-entry';
                         if (msg.includes('[📥]')) div.className += ' download';
                         else if (msg.includes('[💬]')) div.className += ' comment';
+                        else if (msg.includes('[🍪]')) div.className += ' cookie';
+                        else if (msg.includes('[⚠️]')) div.className += ' warn';
                         else if (msg.includes('[+]')) div.className += ' success';
                         else if (msg.includes('[!]')) div.className += ' error';
                         else if (msg.includes('[*]')) div.className += ' info';
@@ -648,6 +680,7 @@
             const download = document.getElementById('download') ? document.getElementById('download').checked : true;
             const comment = document.getElementById('comment') ? document.getElementById('comment').checked : false;
             const comments = document.getElementById('comments') ? document.getElementById('comments').value.trim() : '';
+            const cookies = document.getElementById('cookies') ? document.getElementById('cookies').value.trim() : '';
             const proxies = document.getElementById('proxies') ? document.getElementById('proxies').value.trim() : '';
 
             if (!url || url === 'https://example.com') {
@@ -677,6 +710,7 @@
                         download: download,
                         comment: comment,
                         comments: comments,
+                        cookies: cookies,
                         proxies: proxies
                     })
                 });
@@ -693,7 +727,6 @@
             } catch (e) {
                 alert('Lỗi kết nối tới server!');
                 btnStart.disabled = false;
-            }
         }
 
         async function stopCampaign() {

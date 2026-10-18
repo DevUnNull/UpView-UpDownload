@@ -180,21 +180,118 @@ def simulate_download_action(driver):
         add_log(f"[!] Sự cố khi click nút Download: {err}")
         return False
 
+def inject_itchio_cookies(driver, cookie_raw):
+    """
+    Nạp cookie phiên đăng nhập Itch.io vào trình duyệt trước khi mở trang game.
+    Hỗ trợ:
+    1. Chuỗi header cookie: itchio=...; itchio_token=...
+    2. Giá trị mã token thô: WyJodkE2I...
+    3. JSON từ Cookie-Editor: [{"name": "itchio", "value": "..."}]
+    """
+    if not cookie_raw or not cookie_raw.strip():
+        return False
+        
+    try:
+        raw = cookie_raw.strip()
+        # Mở trang nhẹ trên .itch.io để khởi tạo context domain
+        driver.get("https://itch.io/robots.txt")
+        time.sleep(1.0)
+        
+        # 1. Thử parse JSON
+        if raw.startswith("[") and raw.endswith("]"):
+            import json
+            cookie_list = json.loads(raw)
+            count = 0
+            for c in cookie_list:
+                name = c.get("name")
+                val = c.get("value")
+                if name and val:
+                    driver.add_cookie({
+                        "name": name,
+                        "value": val,
+                        "domain": ".itch.io",
+                        "path": "/",
+                        "secure": True
+                    })
+                    count += 1
+            add_log(f"[🍪] Đã nạp {count} Cookie JSON xác thực tài khoản Itch.io!")
+            return True
+
+        # 2. Chuỗi Cookie header (vd: itchio=xxx; itchio_token=yyy)
+        if "=" in raw:
+            parts = raw.split(";")
+            injected = 0
+            for part in parts:
+                part = part.strip()
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"')
+                    if k:
+                        driver.add_cookie({
+                            "name": k,
+                            "value": v,
+                            "domain": ".itch.io",
+                            "path": "/",
+                            "secure": True
+                        })
+                        injected += 1
+            if injected > 0:
+                add_log(f"[🍪] Đã nạp thành công {injected} Cookie xác thực Itch.io!")
+                return True
+
+        # 3. Giá trị thô của cookie itchio
+        driver.add_cookie({
+            "name": "itchio",
+            "value": raw,
+            "domain": ".itch.io",
+            "path": "/",
+            "secure": True
+        })
+        add_log("[🍪] Đã nạp cookie 'itchio' phiên đăng nhập thành công!")
+        return True
+    except Exception as e:
+        add_log(f"[!] Lỗi khi nạp Cookie: {e}")
+        return False
+
 def simulate_comment_action(driver, custom_comments=None):
     """
     Hàm tự động cuộn xuống khung bình luận, nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
     """
     try:
-        # Cuộn trang xuống khu vực bình luận
-        driver.execute_script("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
+        # Cuộn trang đến đúng khu vực #comments hoặc widget bình luận
+        driver.execute_script("""
+            var el = document.getElementById('comments') || 
+                     document.querySelector('.game_comments_widget') || 
+                     document.querySelector('.community_topic_posts_widget') ||
+                     document.querySelector('textarea[name="body"]');
+            if (el) {
+                el.scrollIntoView({behavior: 'smooth', block: 'center'});
+            } else {
+                window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
+            }
+        """)
         time.sleep(2.0)
+
+        # Kiểm tra nếu trang có nút mở khung viết comment (ví dụ "Leave a comment")
+        try:
+            open_btns = driver.find_elements(By.CSS_SELECTOR, ".toggle_comment_btn, a[href='#comments'].action_btn, .btn_add_comment")
+            for ob in open_btns:
+                if ob.is_displayed():
+                    ob.click()
+                    time.sleep(1.0)
+                    break
+        except Exception:
+            pass
 
         # Định vị ô textarea bình luận của Itch.io
         comment_selectors = [
             "textarea[name='body']",
             ".comment_form textarea",
-            "#comment_body",
             ".community_post_form textarea",
+            "#comments ~ form textarea",
+            ".game_comments_widget textarea",
+            "#comment_body",
             "textarea"
         ]
 
@@ -230,6 +327,8 @@ def simulate_comment_action(driver, custom_comments=None):
             time.sleep(1.2)
 
             submit_selectors = [
+                "form.comment_form button[type='submit']",
+                "form.comment_form input[type='submit']",
                 "input[type='submit'][value*='Post']",
                 "button[type='submit']",
                 ".comment_form button",
@@ -256,27 +355,43 @@ def simulate_comment_action(driver, custom_comments=None):
                 except Exception:
                     driver.execute_script("arguments[0].click();", submit_btn)
 
+                time.sleep(3.0)
+                # Kiểm tra nếu xuất hiện thông báo lỗi từ phía Itch.io
+                try:
+                    err_elements = driver.find_elements(By.CSS_SELECTOR, ".form_errors, .flash_message.error")
+                    for err_el in err_elements:
+                        if err_el.is_displayed() and err_el.text.strip():
+                            add_log(f"[!] Lỗi từ Itch.io khi gửi comment: {err_el.text.strip()}")
+                            return False
+                except Exception:
+                    pass
+
                 with bot_state["lock"]:
                     bot_state["comment_count"] += 1
-                add_log("[💬] Đã gửi bình luận thành công lên Itch.io!")
-                time.sleep(2.5)
+                add_log(f"[💬] Đã gửi bình luận thành công: \"{display_txt}\"")
                 return True
             else:
                 add_log("[-] Không tìm thấy nút gửi bình luận (Submit).")
                 return False
         else:
-            add_log("[-] Khung bình luận chưa khả dụng (Trang tắt bình luận hoặc yêu cầu đăng nhập tài khoản Itch.io).")
+            # Kiểm tra xem có phải do chưa đăng nhập tài khoản không
+            login_req = driver.find_elements(By.XPATH, "//p[contains(@class, 'form_placeholder')]//a[contains(@href, 'login') or contains(text(), 'Log in')] | //a[@data-register_action='comment']")
+            if login_req:
+                add_log("[⚠️] Itch.io BẮT BUỘC ĐĂNG NHẬP để comment! Hãy dán Cookie tài khoản ('itchio') vào ô Cookie trên Dashboard.")
+            else:
+                add_log("[-] Không tìm thấy ô nhập bình luận (Trang có thể đã khóa tính năng bình luận).")
             return False
     except Exception as e:
         err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
         add_log(f"[!] Không thể gửi bình luận: {err}")
         return False
 
-def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment=False, custom_comments=None, proxies_list=None):
+def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment=False, custom_comments=None, cookies_list=None, proxies_list=None):
     add_log(f"[*] Bắt đầu chiến dịch: {url}")
     dl_status = "Bật" if do_download else "Tắt"
     cm_status = "Bật" if do_comment else "Tắt"
-    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Download: {dl_status} | Comment: {cm_status}")
+    ck_status = f"{len(cookies_list)} tài khoản" if (cookies_list and len(cookies_list) > 0) else "Chưa nạp"
+    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Download: {dl_status} | Comment: {cm_status} (Cookie: {ck_status})")
     if proxies_list:
         add_log(f"[*] Đã nạp danh sách {len(proxies_list)} Proxy xoay vòng IP.")
     else:
@@ -352,6 +467,11 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
                 )
             except Exception:
                 pass
+
+            # Nạp cookie xác thực tài khoản Itch.io nếu được cung cấp
+            if do_comment and cookies_list and len(cookies_list) > 0:
+                selected_cookie = cookies_list[(i - 1) % len(cookies_list)]
+                inject_itchio_cookies(driver, selected_cookie)
 
             driver.set_page_load_timeout(35)
 
@@ -463,6 +583,7 @@ def start_campaign():
     do_download = bool(data.get("download", True))
     do_comment = bool(data.get("comment", False))
     raw_comments = data.get("comments", "")
+    raw_cookies = data.get("cookies", "")
     raw_proxies = data.get("proxies", "")
 
     custom_comments = []
@@ -471,6 +592,17 @@ def start_campaign():
             c = line.strip()
             if c:
                 custom_comments.append(c)
+
+    cookies_list = []
+    if raw_cookies:
+        stripped_ck = raw_cookies.strip()
+        if stripped_ck.startswith("[") and stripped_ck.endswith("]"):
+            cookies_list.append(stripped_ck)
+        else:
+            for line in raw_cookies.splitlines():
+                ck = line.strip()
+                if ck:
+                    cookies_list.append(ck)
 
     proxies_list = []
     if raw_proxies:
@@ -499,7 +631,7 @@ def start_campaign():
 
     threading.Thread(
         target=bot_worker,
-        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment, custom_comments, proxies_list),
+        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment, custom_comments, cookies_list, proxies_list),
         daemon=True
     ).start()
 
