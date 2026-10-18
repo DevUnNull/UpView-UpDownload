@@ -209,17 +209,36 @@ def inject_itchio_cookies(driver, cookie_raw):
         print(f"[!] Lỗi khi nạp Cookie: {e}")
         return False
 
-def simulate_comment_action(driver, custom_comments=None):
+def simulate_comment_action(driver, custom_comments=None, base_url=None):
     """
-    Hàm tự động cuộn xuống khung bình luận, nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
+    Hàm tự động định vị khung bình luận 'Write your comment...', click kích hoạt,
+    nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
     """
     try:
+        # Nếu đang bị chuyển hướng sang trang /download/ hoặc trang khác, quay lại trang game chính
+        if base_url and ("/download" in driver.current_url or "/file/" in driver.current_url):
+            print("[*] Đang điều hướng lại trang chính để bình luận...")
+            driver.get(base_url)
+            time.sleep(2.5)
+
+        # Đóng popup / lightbox quyên góp nếu đang mở che khuất trang
+        try:
+            close_btns = driver.find_elements(By.CSS_SELECTOR, ".close_lightbox_btn, .lightbox_close, a.close, button.close, .close_button")
+            for cb in close_btns:
+                if cb.is_displayed():
+                    cb.click()
+                    time.sleep(0.8)
+                    break
+        except Exception:
+            pass
+
         # Cuộn trang đến đúng khu vực #comments hoặc widget bình luận
         driver.execute_script("""
             var el = document.getElementById('comments') || 
                      document.querySelector('.game_comments_widget') || 
                      document.querySelector('.community_topic_posts_widget') ||
-                     document.querySelector('textarea[name="body"]');
+                     document.querySelector('[placeholder*="comment" i]') ||
+                     document.querySelector('textarea');
             if (el) {
                 el.scrollIntoView({behavior: 'smooth', block: 'center'});
             } else {
@@ -239,15 +258,26 @@ def simulate_comment_action(driver, custom_comments=None):
         except Exception:
             pass
 
-        # Định vị ô textarea bình luận của Itch.io
+        # Định vị ô nhập bình luận (Bao gồm placeholder 'Write your comment...', input, textarea, contenteditable)
         comment_selectors = [
+            "*[placeholder*='Write your comment' i]",
+            "*[placeholder*='comment' i]",
+            "*[placeholder*='Comment' i]",
             "textarea[name='body']",
             ".comment_form textarea",
+            ".comment_form input[type='text']",
             ".community_post_form textarea",
             "#comments ~ form textarea",
+            "#comments ~ * textarea",
+            "#comments ~ * input[type='text']",
             ".game_comments_widget textarea",
+            ".game_comments_widget input[type='text']",
+            ".game_comments_widget [contenteditable='true']",
             "#comment_body",
-            "textarea"
+            "form.comment_form textarea",
+            "form textarea",
+            "textarea",
+            "div[contenteditable='true']"
         ]
 
         comment_box = None
@@ -263,6 +293,30 @@ def simulate_comment_action(driver, custom_comments=None):
             except Exception:
                 continue
 
+        # Tìm kiếm nâng cao bằng XPath nếu CSS selector chưa bắt được
+        if not comment_box:
+            xpath_queries = [
+                "//*[contains(translate(@placeholder, 'WRITE YOUR COMMENT', 'write your comment'), 'write your comment')]",
+                "//*[contains(translate(@placeholder, 'COMMENT', 'comment'), 'comment')]",
+                "//div[contains(@class, 'game_comments_widget')]//textarea",
+                "//div[contains(@class, 'game_comments_widget')]//input[@type='text']",
+                "//div[contains(@class, 'game_comments_widget')]//*[@contenteditable='true']",
+                "//form[contains(@class, 'comment_form')]//textarea",
+                "//textarea[@name='body']",
+                "//textarea"
+            ]
+            for xp in xpath_queries:
+                try:
+                    elems = driver.find_elements(By.XPATH, xp)
+                    for el in elems:
+                        if el.is_displayed() and el.is_enabled():
+                            comment_box = el
+                            break
+                    if comment_box:
+                        break
+                except Exception:
+                    continue
+
         if comment_box:
             comments_pool = custom_comments if (custom_comments and len(custom_comments) > 0) else SAMPLE_COMMENTS
             comment_text = random.choice(comments_pool)
@@ -270,23 +324,42 @@ def simulate_comment_action(driver, custom_comments=None):
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", comment_box)
             time.sleep(1.0)
 
+            # Click vào ô nhập để kích hoạt/mở rộng (nếu là dạng click to expand)
             try:
                 comment_box.click()
             except Exception:
+                driver.execute_script("arguments[0].click();", comment_box)
+            time.sleep(1.0)
+
+            # Sau khi click, kiểm tra xem có textarea nào mới xuất hiện/kích hoạt không
+            active_box = comment_box
+            try:
+                expanded = driver.find_elements(By.CSS_SELECTOR, "textarea[name='body'], .comment_form textarea, textarea:focus, textarea")
+                for eb in expanded:
+                    if eb.is_displayed() and eb.is_enabled():
+                        active_box = eb
+                        break
+            except Exception:
                 pass
 
-            comment_box.clear()
-            comment_box.send_keys(comment_text)
+            # Xóa và gõ nội dung bình luận
+            try:
+                active_box.clear()
+            except Exception:
+                pass
+            active_box.send_keys(comment_text)
             print(f"[*] Đã nhập nội dung bình luận: '{comment_text}'")
             time.sleep(1.2)
 
             submit_selectors = [
                 "form.comment_form button[type='submit']",
                 "form.comment_form input[type='submit']",
-                "input[type='submit'][value*='Post']",
+                "input[type='submit'][value*='Post' i]",
+                "input[type='submit'][value*='Comment' i]",
                 "button[type='submit']",
                 ".comment_form button",
                 ".post_comment_btn",
+                "button.button",
                 "input[type='submit']"
             ]
 
@@ -302,6 +375,17 @@ def simulate_comment_action(driver, custom_comments=None):
                         break
                 except Exception:
                     continue
+
+            # Fallback XPath
+            if not submit_btn:
+                try:
+                    xpath_btn = driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'POST COMMENT', 'post comment'), 'post') or contains(translate(text(), 'COMMENT', 'comment'), 'comment')]")
+                    for xb in xpath_btn:
+                        if xb.is_displayed():
+                            submit_btn = xb
+                            break
+                except Exception:
+                    pass
 
             if submit_btn:
                 try:
@@ -427,11 +511,11 @@ def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_c
 
                 time.sleep(2.5)
 
+                if do_comment:
+                    simulate_comment_action(driver, custom_comments, base_url=url)
+
                 if do_download:
                     simulate_download_action(driver)
-
-                if do_comment:
-                    simulate_comment_action(driver, custom_comments)
 
                 # Thời gian chờ ngẫu nhiên giống người thật (để load script/analytics)
                 view_duration = random.uniform(min_wait, max_wait)
