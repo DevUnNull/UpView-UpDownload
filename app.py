@@ -257,7 +257,7 @@ def inject_itchio_cookies(driver, cookie_raw):
 def simulate_comment_action(driver, custom_comments=None, base_url=None):
     """
     Hàm tự động định vị khung bình luận 'Write your comment...', click kích hoạt,
-    nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
+    nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io mà không bao giờ bị lỗi 'stale element reference'.
     """
     try:
         # Nếu đang bị chuyển hướng sang trang /download/ hoặc trang khác, quay lại trang game chính
@@ -272,199 +272,206 @@ def simulate_comment_action(driver, custom_comments=None, base_url=None):
             for cb in close_btns:
                 if cb.is_displayed():
                     cb.click()
-                    time.sleep(0.8)
+                    time.sleep(0.5)
                     break
         except Exception:
             pass
 
         # Cuộn trang đến đúng khu vực #comments hoặc widget bình luận
-        driver.execute_script("""
-            var el = document.getElementById('comments') || 
-                     document.querySelector('.game_comments_widget') || 
-                     document.querySelector('.community_topic_posts_widget') ||
-                     document.querySelector('[placeholder*="comment" i]') ||
-                     document.querySelector('textarea');
-            if (el) {
-                el.scrollIntoView({behavior: 'smooth', block: 'center'});
-            } else {
-                window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
-            }
-        """)
+        try:
+            driver.execute_script("""
+                var el = document.getElementById('comments') || 
+                         document.querySelector('.game_comments_widget') || 
+                         document.querySelector('.community_topic_posts_widget') ||
+                         document.querySelector('[placeholder*="comment" i]') ||
+                         document.querySelector('textarea');
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                } else {
+                    window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
+                }
+            """)
+        except Exception:
+            pass
         time.sleep(2.0)
 
-        # Kiểm tra nếu trang có nút mở khung viết comment (ví dụ "Leave a comment")
+        # Kiểm tra xem có yêu cầu đăng nhập không (nếu cookie không hợp lệ hoặc hết hạn)
         try:
-            open_btns = driver.find_elements(By.CSS_SELECTOR, ".toggle_comment_btn, a[href='#comments'].action_btn, .btn_add_comment")
-            for ob in open_btns:
-                if ob.is_displayed():
-                    ob.click()
-                    time.sleep(1.0)
+            login_req = driver.find_elements(By.CSS_SELECTOR, ".game_comments_widget .form_placeholder a[href*='login'], #comments ~ .form_placeholder a[href*='login'], a[@data-register_action='comment']")
+            for lr in login_req:
+                if lr.is_displayed():
+                    add_log("[⚠️] Itch.io yêu cầu đăng nhập để bình luận! Hãy chắc chắn Cookie 'itchio' đã nạp là tài khoản hợp lệ.")
                     break
         except Exception:
             pass
 
-        # Định vị ô nhập bình luận (Bao gồm placeholder 'Write your comment...', input, textarea, contenteditable)
-        comment_selectors = [
-            "*[placeholder*='Write your comment' i]",
-            "*[placeholder*='comment' i]",
-            "*[placeholder*='Comment' i]",
-            "textarea[name='body']",
-            ".comment_form textarea",
-            ".comment_form input[type='text']",
-            ".community_post_form textarea",
-            "#comments ~ form textarea",
-            "#comments ~ * textarea",
-            "#comments ~ * input[type='text']",
-            ".game_comments_widget textarea",
-            ".game_comments_widget input[type='text']",
-            ".game_comments_widget [contenteditable='true']",
-            "#comment_body",
-            "form.comment_form textarea",
-            "form textarea",
-            "textarea",
-            "div[contenteditable='true']"
-        ]
+        # 1. KÍCH HOẠT / MỞ KHUNG NHẬP BÌNH LUẬN (Click placeholder nếu có)
+        # Sử dụng JavaScript trực tiếp để click placeholder, tránh lưu tham chiếu Selenium có thể bị stale
+        driver.execute_script("""
+            var selectors = [
+                "*[placeholder*='Write your comment' i]",
+                ".game_comments_widget .form_placeholder button",
+                ".game_comments_widget .form_placeholder",
+                ".form_placeholder",
+                "*[placeholder*='comment' i]",
+                "textarea[name='body']",
+                ".comment_form textarea",
+                ".toggle_comment_btn",
+                ".btn_add_comment"
+            ];
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (el && (el.offsetWidth > 0 || el.offsetHeight > 0 || window.getComputedStyle(el).display !== 'none')) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    el.click();
+                    return true;
+                }
+            }
+            return false;
+        """)
+        time.sleep(1.8) # Chờ Itch.io thay thế DOM placeholder thành <form class="comment_form">
 
-        comment_box = None
-        for sel in comment_selectors:
+        # 2. CHUẨN BỊ NỘI DUNG BÌNH LUẬN
+        comments_pool = custom_comments if (custom_comments and len(custom_comments) > 0) else SAMPLE_COMMENTS
+        comment_text = random.choice(comments_pool)
+        display_txt = comment_text[:40] + "..." if len(comment_text) > 40 else comment_text
+
+        # 3. NHẬP NỘI DUNG VÀO TEXTAREA
+        # Phương pháp 1: Pure JavaScript Injection (Tuyệt đối không bao giờ bị Stale Element Reference vì không truyền WebElement)
+        typed_via_js = driver.execute_script("""
+            var text = arguments[0];
+            var selectors = [
+                "textarea[name='body']",
+                ".comment_form textarea",
+                "form.comment_form textarea",
+                "#comments ~ form textarea",
+                ".game_comments_widget textarea",
+                "#comment_body",
+                "form textarea",
+                "textarea",
+                "[contenteditable='true']",
+                "input[name='body']"
+            ];
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (el && (el.offsetWidth > 0 || el.offsetHeight > 0 || window.getComputedStyle(el).display !== 'none')) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    el.focus();
+                    if (el.tagName.toLowerCase() === 'textarea' || el.tagName.toLowerCase() === 'input') {
+                        el.value = text;
+                    } else {
+                        el.innerText = text;
+                    }
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    return true;
+                }
+            }
+            return false;
+        """, comment_text)
+
+        # Phương pháp 2: Nếu JS chưa tìm thấy ô, thử tìm fresh elements từ DOM qua Selenium
+        if not typed_via_js:
             try:
-                boxes = driver.find_elements(By.CSS_SELECTOR, sel)
-                for b in boxes:
-                    if b.is_displayed() and b.is_enabled():
-                        comment_box = b
-                        break
-                if comment_box:
-                    break
-            except Exception:
-                continue
-
-        # Tìm kiếm nâng cao bằng XPath nếu CSS selector chưa bắt được
-        if not comment_box:
-            xpath_queries = [
-                "//*[contains(translate(@placeholder, 'WRITE YOUR COMMENT', 'write your comment'), 'write your comment')]",
-                "//*[contains(translate(@placeholder, 'COMMENT', 'comment'), 'comment')]",
-                "//div[contains(@class, 'game_comments_widget')]//textarea",
-                "//div[contains(@class, 'game_comments_widget')]//input[@type='text']",
-                "//div[contains(@class, 'game_comments_widget')]//*[@contenteditable='true']",
-                "//form[contains(@class, 'comment_form')]//textarea",
-                "//textarea[@name='body']",
-                "//textarea"
-            ]
-            for xp in xpath_queries:
-                try:
-                    elems = driver.find_elements(By.XPATH, xp)
-                    for el in elems:
-                        if el.is_displayed() and el.is_enabled():
-                            comment_box = el
+                fresh_boxes = driver.find_elements(By.CSS_SELECTOR, "textarea[name='body'], .comment_form textarea, form textarea, textarea")
+                for fb in fresh_boxes:
+                    try:
+                        if fb.is_displayed():
+                            fb.clear()
+                            fb.send_keys(comment_text)
+                            typed_via_js = True
                             break
-                    if comment_box:
-                        break
-                except Exception:
-                    continue
-
-        if comment_box:
-            comments_pool = custom_comments if (custom_comments and len(custom_comments) > 0) else SAMPLE_COMMENTS
-            comment_text = random.choice(comments_pool)
-
-            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", comment_box)
-            time.sleep(1.0)
-
-            # Click vào ô nhập để kích hoạt/mở rộng (nếu là dạng click to expand)
-            try:
-                comment_box.click()
-            except Exception:
-                driver.execute_script("arguments[0].click();", comment_box)
-            time.sleep(1.0)
-
-            # Sau khi click, kiểm tra xem có textarea nào mới xuất hiện/kích hoạt không
-            active_box = comment_box
-            try:
-                expanded = driver.find_elements(By.CSS_SELECTOR, "textarea[name='body'], .comment_form textarea, textarea:focus, textarea")
-                for eb in expanded:
-                    if eb.is_displayed() and eb.is_enabled():
-                        active_box = eb
-                        break
+                    except Exception:
+                        continue
             except Exception:
                 pass
 
-            # Xóa và gõ nội dung bình luận
-            try:
-                active_box.clear()
-            except Exception:
-                pass
-            active_box.send_keys(comment_text)
-            display_txt = comment_text[:40] + "..." if len(comment_text) > 40 else comment_text
-            add_log(f"[*] Đã nhập bình luận: \"{display_txt}\"")
-            time.sleep(1.2)
-
-            submit_selectors = [
-                "form.comment_form button[type='submit']",
-                "form.comment_form input[type='submit']",
-                "input[type='submit'][value*='Post' i]",
-                "input[type='submit'][value*='Comment' i]",
-                "button[type='submit']",
-                ".comment_form button",
-                ".post_comment_btn",
-                "button.button",
-                "input[type='submit']"
-            ]
-
-            submit_btn = None
-            for s_sel in submit_selectors:
-                try:
-                    btns = driver.find_elements(By.CSS_SELECTOR, s_sel)
-                    for btn in btns:
-                        if btn.is_displayed() and btn.is_enabled():
-                            submit_btn = btn
-                            break
-                    if submit_btn:
-                        break
-                except Exception:
-                    continue
-
-            # Fallback XPath nếu chưa thấy nút submit
-            if not submit_btn:
-                try:
-                    xpath_btn = driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'POST COMMENT', 'post comment'), 'post') or contains(translate(text(), 'COMMENT', 'comment'), 'comment')]")
-                    for xb in xpath_btn:
-                        if xb.is_displayed():
-                            submit_btn = xb
-                            break
-                except Exception:
-                    pass
-
-            if submit_btn:
-                try:
-                    submit_btn.click()
-                except Exception:
-                    driver.execute_script("arguments[0].click();", submit_btn)
-
-                time.sleep(3.0)
-                # Kiểm tra nếu xuất hiện thông báo lỗi từ phía Itch.io
-                try:
-                    err_elements = driver.find_elements(By.CSS_SELECTOR, ".form_errors, .flash_message.error")
-                    for err_el in err_elements:
-                        if err_el.is_displayed() and err_el.text.strip():
-                            add_log(f"[!] Lỗi từ Itch.io khi gửi comment: {err_el.text.strip()}")
-                            return False
-                except Exception:
-                    pass
-
-                with bot_state["lock"]:
-                    bot_state["comment_count"] += 1
-                add_log(f"[💬] Đã gửi bình luận thành công: \"{display_txt}\"")
-                return True
-            else:
-                add_log("[-] Không tìm thấy nút gửi bình luận (Submit).")
-                return False
-        else:
-            # Kiểm tra xem có phải do chưa đăng nhập tài khoản không
+        if not typed_via_js:
+            # Kiểm tra xem có phải do chưa đăng nhập không
             login_req = driver.find_elements(By.XPATH, "//p[contains(@class, 'form_placeholder')]//a[contains(@href, 'login') or contains(text(), 'Log in')] | //a[@data-register_action='comment']")
             if login_req:
                 add_log("[⚠️] Itch.io BẮT BUỘC ĐĂNG NHẬP để comment! Hãy dán Cookie tài khoản ('itchio') vào ô Cookie trên Dashboard.")
             else:
                 add_log("[-] Không tìm thấy ô nhập bình luận (Trang có thể đã khóa tính năng bình luận).")
             return False
+
+        add_log(f"[*] Đã nhập bình luận: \"{display_txt}\"")
+        time.sleep(1.5)
+
+        # 4. BẤM NÚT GỬI (SUBMIT)
+        # Sử dụng JS để click nút Submit trực tiếp từ DOM mới nhất, an toàn và chống Stale Element
+        submitted = driver.execute_script("""
+            var selectors = [
+                "form.comment_form button[type='submit']",
+                "form.comment_form input[type='submit']",
+                "form.comment_form .buttons button",
+                "button.post_comment_btn",
+                ".post_comment_btn",
+                "input[type='submit'][value*='Post' i]",
+                "input[type='submit'][value*='Comment' i]",
+                "form.comment_form button",
+                "#comments ~ form button[type='submit']",
+                ".game_comments_widget button[type='submit']",
+                "button[type='submit']",
+                "input[type='submit']"
+            ];
+            for (var i = 0; i < selectors.length; i++) {
+                var btn = document.querySelector(selectors[i]);
+                if (btn && (btn.offsetWidth > 0 || btn.offsetHeight > 0)) {
+                    btn.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    btn.click();
+                    return true;
+                }
+            }
+            // Fallback tìm button theo text
+            var allBtns = document.querySelectorAll('button, input[type=\"submit\"], a.button');
+            for (var j = 0; j < allBtns.length; j++) {
+                var val = (allBtns[j].innerText || allBtns[j].value || '').toLowerCase();
+                if (val.includes('post comment') || (val.includes('post') && val.includes('comment'))) {
+                    allBtns[j].scrollIntoView({behavior: 'smooth', block: 'center'});
+                    allBtns[j].click();
+                    return true;
+                }
+            }
+            return false;
+        """)
+
+        # Fallback bằng Selenium nếu JS chưa bấm được
+        if not submitted:
+            try:
+                btns = driver.find_elements(By.CSS_SELECTOR, "form.comment_form button[type='submit'], button[type='submit'], input[type='submit']")
+                for btn in btns:
+                    try:
+                        if btn.is_displayed():
+                            btn.click()
+                            submitted = True
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        if not submitted:
+            add_log("[-] Không tìm thấy nút gửi bình luận (Submit).")
+            return False
+
+        time.sleep(3.5)
+
+        # Kiểm tra thông báo lỗi từ Itch.io (nếu có, ví dụ spam filter hoặc form error)
+        try:
+            err_elements = driver.find_elements(By.CSS_SELECTOR, ".form_errors, .flash_message.error")
+            for err_el in err_elements:
+                if err_el.is_displayed() and err_el.text.strip():
+                    add_log(f"[!] Lỗi từ Itch.io khi gửi comment: {err_el.text.strip()}")
+                    return False
+        except Exception:
+            pass
+
+        with bot_state["lock"]:
+            bot_state["comment_count"] += 1
+        add_log(f"[💬] Đã gửi bình luận thành công: \"{display_txt}\"")
+        return True
+
     except Exception as e:
         err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
         add_log(f"[!] Không thể gửi bình luận: {err}")
