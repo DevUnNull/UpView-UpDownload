@@ -80,7 +80,7 @@ bot_state = {
     "comment_count": 0,
     "logs": ["[✓] Hệ thống Web Dashboard đã khởi động sẵn sàng."],
     "current_driver": None,
-    "lock": threading.Lock()
+    "lock": threading.RLock()
 }
 
 def add_log(message):
@@ -639,15 +639,17 @@ def start_campaign():
 
 @app.route("/api/stop", methods=["POST"])
 def stop_campaign():
+    driver_to_quit = None
     with bot_state["lock"]:
         bot_state["is_running"] = False
-        add_log("[*] Đang gửi tín hiệu dừng, vui lòng đợi đóng phiên hiện tại...")
-        if bot_state["current_driver"]:
-            try:
-                bot_state["current_driver"].quit()
-            except Exception:
-                pass
-            bot_state["current_driver"] = None
+        driver_to_quit = bot_state["current_driver"]
+        bot_state["current_driver"] = None
+    add_log("[*] Đang gửi tín hiệu dừng, vui lòng đợi đóng phiên hiện tại...")
+    if driver_to_quit:
+        try:
+            driver_to_quit.quit()
+        except Exception:
+            pass
     return jsonify({"success": True})
 
 @app.route("/api/clear_logs", methods=["POST"])
