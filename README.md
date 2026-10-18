@@ -7,7 +7,8 @@ Hệ thống tự động hóa tăng lượt truy cập (view) chất lượng c
 ## 🌟 Các Tính Năng Nổi Bật
 
 - **Giao Diện Web Hiện Đại**: Chạy mượt mà trên mọi trình duyệt (Chrome, Safari...), hiển thị sắc nét với giao diện Dark Mode chuẩn công nghệ.
-- **Thống Kê Thời Gian Thực**: Theo dõi tổng số lượt view, số lượt thành công, **lượt tải (downloads)**, thất bại và tỉ lệ hoàn thành (%) trực tiếp.
+- **Thống Kê Thời Gian Thực**: Theo dõi tổng số lượt view, số lượt thành công, **lượt tải (downloads)**, **bình luận (comments)**, thất bại và tỉ lệ hoàn thành (%) trực tiếp.
+- **Tự Động Gửi Bình Luận (Auto-Comment Itch.io)**: Tự động cuộn trang, điền nội dung ngẫu nhiên vào ô textarea và bấm nút gửi bình luận (Hỗ trợ danh sách tùy chỉnh hoặc mẫu có sẵn).
 - **Tự Động Kích Hoạt Tải Về (Auto-Click Download)**: Tự động tìm nút Download trên Itch.io, vượt modal quyên góp và click tệp game để kích hoạt tăng lượt tải trên server Itch.io.
 - **Chặn Lưu File Rác Đầy Ổ Cứng**: Sử dụng thư mục tạm thời tự hủy ngay sau mỗi phiên, không tốn dung lượng ổ đĩa.
 - **Chống Phát Hiện Bot & Unique View (Itch.io Optimized)**:

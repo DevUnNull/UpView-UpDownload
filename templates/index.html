@@ -400,6 +400,7 @@
         }
 
         .log-entry.download { color: #c084fc; font-weight: 600; }
+        .log-entry.comment { color: #f59e0b; font-weight: 600; }
         .log-entry.success { color: #34d399; }
         .log-entry.error { color: #f87171; }
         .log-entry.info { color: #38bdf8; }
@@ -449,6 +450,10 @@
             <div class="stat-card">
                 <div class="stat-label">Lượt Tải (Downloads)</div>
                 <div id="statDownload" class="stat-value" style="color: #c084fc;">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Bình Luận (Comments)</div>
+                <div id="statComment" class="stat-value" style="color: #f59e0b;">0</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Lượt Thất Bại</div>
@@ -511,6 +516,20 @@
                         <input type="checkbox" id="download" checked>
                         <span style="color: #c084fc; font-weight: 600;">📥 Tự động click Download (Tăng lượt tải Itch.io)</span>
                     </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="comment" onchange="toggleCommentSection()">
+                        <span style="color: #f59e0b; font-weight: 600;">💬 Tự động gửi Bình luận (Auto-Comment Itch.io)</span>
+                    </label>
+                </div>
+
+                <!-- Custom Comments Container (Collapsible) -->
+                <div id="commentBoxContainer" class="form-group" style="display: none; margin-top: 10px;">
+                    <label for="comments" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>💬 Danh Sách Bình Luận (Mỗi dòng 1 câu):</span>
+                        <span style="font-size: 11px; color: #f59e0b;">Để trống sẽ dùng bình luận mẫu</span>
+                    </label>
+                    <textarea id="comments" rows="3" placeholder="Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.&#10;Đồ họa và cơ chế chơi tuyệt vời, rất đáng trải nghiệm!&#10;Mình rất thích ý tưởng này, cố lên tác giả ơi!&#10;Awesome game! Really enjoyed playing it." style="width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; color: var(--text-main); padding: 10px 12px; font-family: inherit; font-size: 13px; resize: vertical; outline: none;"></textarea>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">💡 <strong>Lưu ý:</strong> Trên Itch.io, trang game cần bật <em>"Allow anonymous comments"</em> trong mục Project Settings để khách không cần đăng nhập vẫn bình luận được.</p>
                 </div>
 
                 <div class="form-group" style="margin-top: 14px;">
@@ -549,6 +568,14 @@
         let isPolling = false;
         let pollInterval = null;
 
+        function toggleCommentSection() {
+            const chk = document.getElementById('comment');
+            const box = document.getElementById('commentBoxContainer');
+            if (box) {
+                box.style.display = chk && chk.checked ? 'block' : 'none';
+            }
+        }
+
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
@@ -558,6 +585,7 @@
                 document.getElementById('statTotal').innerText = data.total_views;
                 document.getElementById('statSuccess').innerText = data.success_count;
                 document.getElementById('statDownload').innerText = data.download_count || 0;
+                document.getElementById('statComment').innerText = data.comment_count || 0;
                 document.getElementById('statFail').innerText = data.fail_count;
 
                 const completed = data.success_count + data.fail_count;
@@ -595,6 +623,7 @@
                         const div = document.createElement('div');
                         div.className = 'log-entry';
                         if (msg.includes('[📥]')) div.className += ' download';
+                        else if (msg.includes('[💬]')) div.className += ' comment';
                         else if (msg.includes('[+]')) div.className += ' success';
                         else if (msg.includes('[!]')) div.className += ' error';
                         else if (msg.includes('[*]')) div.className += ' info';
@@ -617,6 +646,8 @@
             const headless = document.getElementById('headless').checked;
             const scroll = document.getElementById('scroll').checked;
             const download = document.getElementById('download') ? document.getElementById('download').checked : true;
+            const comment = document.getElementById('comment') ? document.getElementById('comment').checked : false;
+            const comments = document.getElementById('comments') ? document.getElementById('comments').value.trim() : '';
             const proxies = document.getElementById('proxies') ? document.getElementById('proxies').value.trim() : '';
 
             if (!url || url === 'https://example.com') {
@@ -644,6 +675,8 @@
                         headless: headless,
                         scroll: scroll,
                         download: download,
+                        comment: comment,
+                        comments: comments,
                         proxies: proxies
                     })
                 });

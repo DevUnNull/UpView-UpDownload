@@ -131,6 +131,107 @@ def simulate_download_action(driver):
         print(f"[!] Lỗi khi click nút Download: {str(e).splitlines()[0]}")
         return False
 
+# Danh sách bình luận mẫu cho Itch.io
+SAMPLE_COMMENTS = [
+    "Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.",
+    "Đồ họa và cơ chế chơi tuyệt vời, rất đáng trải nghiệm!",
+    "Mình rất thích ý tưởng này, cố lên tác giả ơi!",
+    "Trải nghiệm mượt mà, gameplay sáng tạo.",
+    "Awesome game! Really enjoyed playing it.",
+    "The art style and soundtrack are amazing! Keep up the great work.",
+    "Great concept and execution. Looking forward to future updates!",
+    "Chơi rất cuốn, ủng hộ tác giả ra thêm nhiều màn mới nhé!"
+]
+
+def simulate_comment_action(driver, custom_comments=None):
+    """
+    Hàm tự động cuộn xuống khung bình luận, nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
+    """
+    try:
+        # Cuộn trang xuống khu vực bình luận
+        driver.execute_script("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
+        time.sleep(2.0)
+
+        # Định vị ô textarea bình luận của Itch.io
+        comment_selectors = [
+            "textarea[name='body']",
+            ".comment_form textarea",
+            "#comment_body",
+            ".community_post_form textarea",
+            "textarea"
+        ]
+
+        comment_box = None
+        for sel in comment_selectors:
+            try:
+                boxes = driver.find_elements(By.CSS_SELECTOR, sel)
+                for b in boxes:
+                    if b.is_displayed() and b.is_enabled():
+                        comment_box = b
+                        break
+                if comment_box:
+                    break
+            except Exception:
+                continue
+
+        if comment_box:
+            comments_pool = custom_comments if (custom_comments and len(custom_comments) > 0) else SAMPLE_COMMENTS
+            comment_text = random.choice(comments_pool)
+
+            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", comment_box)
+            time.sleep(1.0)
+
+            try:
+                comment_box.click()
+            except Exception:
+                pass
+
+            comment_box.clear()
+            comment_box.send_keys(comment_text)
+            print(f"[*] Đã nhập nội dung bình luận: '{comment_text}'")
+            time.sleep(1.2)
+
+            submit_selectors = [
+                "input[type='submit'][value*='Post']",
+                "button[type='submit']",
+                ".comment_form button",
+                ".post_comment_btn",
+                "input[type='submit']"
+            ]
+
+            submit_btn = None
+            for s_sel in submit_selectors:
+                try:
+                    btns = driver.find_elements(By.CSS_SELECTOR, s_sel)
+                    for btn in btns:
+                        if btn.is_displayed() and btn.is_enabled():
+                            submit_btn = btn
+                            break
+                    if submit_btn:
+                        break
+                except Exception:
+                    continue
+
+            if submit_btn:
+                try:
+                    submit_btn.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", submit_btn)
+
+                print("[💬] Đã gửi bình luận thành công lên Itch.io!")
+                time.sleep(2.5)
+                return True
+            else:
+                print("[-] Không tìm thấy nút gửi bình luận (Submit).")
+                return False
+        else:
+            print("[-] Khung bình luận chưa khả dụng (Trang tắt bình luận hoặc yêu cầu đăng nhập tài khoản Itch.io).")
+            return False
+    except Exception as e:
+        err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
+        print(f"[!] Không thể gửi bình luận: {err}")
+        return False
+
 def create_driver(headless=True, proxy=None, temp_dl_dir=None):
     """
     Khởi tạo phiên Chrome với các cờ tối ưu hóa tốc độ, ẩn danh và chống phát hiện bot cho Itch.io.
@@ -186,13 +287,14 @@ def create_driver(headless=True, proxy=None, temp_dl_dir=None):
     driver.set_window_size(width, height)
     return driver
 
-def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, max_retries_per_session=2):
+def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_comment=False, custom_comments=None, max_retries_per_session=2):
     """
     Chạy vòng lặp giả lập trình duyệt xem trang web kèm cơ chế tự động thử lại khi có sự cố mạng.
     """
     print(f"[*] Mục tiêu: {url}")
     print(f"[*] Tổng số phiên (views) cấu hình: {total_sessions}")
-    print(f"[*] Thời gian xem mỗi phiên: {min_wait}s - {max_wait}s\n")
+    print(f"[*] Thời gian xem mỗi phiên: {min_wait}s - {max_wait}s")
+    print(f"[*] Chế độ: Download={'Bật' if do_download else 'Tắt'} | Comment={'Bật' if do_comment else 'Tắt'}\n")
     print("-" * 60)
 
     success_count = 0
@@ -219,6 +321,9 @@ def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, max_
 
                 if do_download:
                     simulate_download_action(driver)
+
+                if do_comment:
+                    simulate_comment_action(driver, custom_comments)
 
                 # Thời gian chờ ngẫu nhiên giống người thật (để load script/analytics)
                 view_duration = random.uniform(min_wait, max_wait)

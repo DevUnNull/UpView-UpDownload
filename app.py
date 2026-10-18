@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tên tool: UpView Bot Web Dashboard (Itch.io & Anti-Detection & Auto-Download Optimized)
-Mô tả: Hệ thống cày view và tự động click download chống phát hiện bot trên Itch.io.
+Tên tool: UpView Bot Web Dashboard (Itch.io & Anti-Detection & Auto-Download & Auto-Comment)
+Mô tả: Hệ thống cày view, tự động click download và gửi bình luận chống phát hiện bot trên Itch.io.
 """
 
 import os
@@ -56,6 +56,18 @@ VIEWPORT_SIZES = [
     (1600, 900)
 ]
 
+# Danh sách bình luận mẫu cho Itch.io
+SAMPLE_COMMENTS = [
+    "Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.",
+    "Đồ họa và cơ chế chơi tuyệt vời, rất đáng trải nghiệm!",
+    "Mình rất thích ý tưởng này, cố lên tác giả ơi!",
+    "Trải nghiệm mượt mà, gameplay sáng tạo.",
+    "Awesome game! Really enjoyed playing it.",
+    "The art style and soundtrack are amazing! Keep up the great work.",
+    "Great concept and execution. Looking forward to future updates!",
+    "Chơi rất cuốn, ủng hộ tác giả ra thêm nhiều màn mới nhé!"
+]
+
 # Quản lý trạng thái bot
 bot_state = {
     "is_running": False,
@@ -64,6 +76,7 @@ bot_state = {
     "success_count": 0,
     "fail_count": 0,
     "download_count": 0,
+    "comment_count": 0,
     "logs": ["[✓] Hệ thống Web Dashboard đã khởi động sẵn sàng."],
     "current_driver": None,
     "lock": threading.Lock()
@@ -166,10 +179,103 @@ def simulate_download_action(driver):
         add_log(f"[!] Sự cố khi click nút Download: {err}")
         return False
 
-def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, proxies_list=None):
+def simulate_comment_action(driver, custom_comments=None):
+    """
+    Hàm tự động cuộn xuống khung bình luận, nhập nội dung ngẫu nhiên và bấm gửi trên Itch.io.
+    """
+    try:
+        # Cuộn trang xuống khu vực bình luận
+        driver.execute_script("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
+        time.sleep(2.0)
+
+        # Định vị ô textarea bình luận của Itch.io
+        comment_selectors = [
+            "textarea[name='body']",
+            ".comment_form textarea",
+            "#comment_body",
+            ".community_post_form textarea",
+            "textarea"
+        ]
+
+        comment_box = None
+        for sel in comment_selectors:
+            try:
+                boxes = driver.find_elements(By.CSS_SELECTOR, sel)
+                for b in boxes:
+                    if b.is_displayed() and b.is_enabled():
+                        comment_box = b
+                        break
+                if comment_box:
+                    break
+            except Exception:
+                continue
+
+        if comment_box:
+            comments_pool = custom_comments if (custom_comments and len(custom_comments) > 0) else SAMPLE_COMMENTS
+            comment_text = random.choice(comments_pool)
+
+            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", comment_box)
+            time.sleep(1.0)
+
+            try:
+                comment_box.click()
+            except Exception:
+                pass
+
+            comment_box.clear()
+            comment_box.send_keys(comment_text)
+            display_txt = comment_text[:40] + "..." if len(comment_text) > 40 else comment_text
+            add_log(f"[*] Đã nhập bình luận: \"{display_txt}\"")
+            time.sleep(1.2)
+
+            submit_selectors = [
+                "input[type='submit'][value*='Post']",
+                "button[type='submit']",
+                ".comment_form button",
+                ".post_comment_btn",
+                "input[type='submit']"
+            ]
+
+            submit_btn = None
+            for s_sel in submit_selectors:
+                try:
+                    btns = driver.find_elements(By.CSS_SELECTOR, s_sel)
+                    for btn in btns:
+                        if btn.is_displayed() and btn.is_enabled():
+                            submit_btn = btn
+                            break
+                    if submit_btn:
+                        break
+                except Exception:
+                    continue
+
+            if submit_btn:
+                try:
+                    submit_btn.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", submit_btn)
+
+                with bot_state["lock"]:
+                    bot_state["comment_count"] += 1
+                add_log("[💬] Đã gửi bình luận thành công lên Itch.io!")
+                time.sleep(2.5)
+                return True
+            else:
+                add_log("[-] Không tìm thấy nút gửi bình luận (Submit).")
+                return False
+        else:
+            add_log("[-] Khung bình luận chưa khả dụng (Trang tắt bình luận hoặc yêu cầu đăng nhập tài khoản Itch.io).")
+            return False
+    except Exception as e:
+        err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
+        add_log(f"[!] Không thể gửi bình luận: {err}")
+        return False
+
+def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment=False, custom_comments=None, proxies_list=None):
     add_log(f"[*] Bắt đầu chiến dịch: {url}")
-    dl_status = "Bật (Auto-Click Download)" if do_download else "Tắt (Chỉ tính view)"
-    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Download: {dl_status}")
+    dl_status = "Bật" if do_download else "Tắt"
+    cm_status = "Bật" if do_comment else "Tắt"
+    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Download: {dl_status} | Comment: {cm_status}")
     if proxies_list:
         add_log(f"[*] Đã nạp danh sách {len(proxies_list)} Proxy xoay vòng IP.")
     else:
@@ -186,7 +292,7 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
         driver = None
         temp_dl_dir = None
         try:
-            # Tạo thư mục tải tạm thời riêng biệt cho phiên này (tự động xóa sau khi xong để không tốn ổ cứng)
+            # Tạo thư mục tải tạm thời riêng biệt cho phiên này (tự động xóa sau khi xong)
             temp_dl_dir = tempfile.mkdtemp(prefix="itch_dl_")
 
             chrome_options = Options()
@@ -258,9 +364,13 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
             # Chờ trang load ổn định trong 2.5 - 3 giây
             time.sleep(2.5)
 
-            # Kích hoạt hành động bấm nút tải xuống nếu được bật
+            # 1. Kích hoạt hành động bấm nút tải xuống nếu được bật
             if do_download and bot_state["is_running"]:
                 simulate_download_action(driver)
+
+            # 2. Kích hoạt hành động gửi bình luận nếu được bật
+            if do_comment and bot_state["is_running"]:
+                simulate_comment_action(driver, custom_comments)
 
             view_duration = random.uniform(min_wait, max_wait)
 
@@ -320,7 +430,7 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
 
     with bot_state["lock"]:
         bot_state["is_running"] = False
-    add_log(f"[*] Hoàn tất chiến dịch! Thành công: {bot_state['success_count']} | Lượt tải: {bot_state['download_count']} | Thất bại: {bot_state['fail_count']}")
+    add_log(f"[*] Hoàn tất chiến dịch! View thành công: {bot_state['success_count']} | Lượt tải: {bot_state['download_count']} | Bình luận: {bot_state['comment_count']} | Thất bại: {bot_state['fail_count']}")
 
 @app.route("/")
 def index():
@@ -336,6 +446,7 @@ def get_status():
             "success_count": bot_state["success_count"],
             "fail_count": bot_state["fail_count"],
             "download_count": bot_state["download_count"],
+            "comment_count": bot_state["comment_count"],
             "logs": bot_state["logs"]
         })
 
@@ -349,7 +460,16 @@ def start_campaign():
     is_headless = bool(data.get("headless", True))
     do_scroll = bool(data.get("scroll", True))
     do_download = bool(data.get("download", True))
+    do_comment = bool(data.get("comment", False))
+    raw_comments = data.get("comments", "")
     raw_proxies = data.get("proxies", "")
+
+    custom_comments = []
+    if raw_comments:
+        for line in raw_comments.splitlines():
+            c = line.strip()
+            if c:
+                custom_comments.append(c)
 
     proxies_list = []
     if raw_proxies:
@@ -374,10 +494,11 @@ def start_campaign():
         bot_state["success_count"] = 0
         bot_state["fail_count"] = 0
         bot_state["download_count"] = 0
+        bot_state["comment_count"] = 0
 
     threading.Thread(
         target=bot_worker,
-        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, proxies_list),
+        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment, custom_comments, proxies_list),
         daemon=True
     ).start()
 
