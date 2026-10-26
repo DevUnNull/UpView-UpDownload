@@ -77,6 +77,7 @@ bot_state = {
     "success_count": 0,
     "fail_count": 0,
     "download_count": 0,
+    "play_count": 0,
     "comment_count": 0,
     "logs": ["[✓] Hệ thống Web Dashboard đã khởi động sẵn sàng."],
     "current_driver": None,
@@ -178,6 +179,66 @@ def simulate_download_action(driver):
     except Exception as e:
         err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
         add_log(f"[!] Sự cố khi click nút Download: {err}")
+        return False
+
+def simulate_play_action(driver):
+    """
+    Tự động định vị và click nút Run Game / Play Game / Restore Game trên Itch.io hoặc web HTML5:
+    1. Tìm các nút Run game / Restore game (.load_iframe_btn, .restore_btn, icon_play, etc.)
+    2. Cuộn tới nút và click mượt mà (hỗ trợ JS click fallback).
+    3. Đợi iframe game (#game_drop / iframe) tải để server Itch.io ghi nhận lượt chơi (Browser Play).
+    4. Cập nhật bot_state['play_count'] và ghi log.
+    """
+    try:
+        play_selectors = [
+            ("css", "button.load_iframe_btn"),
+            ("css", "button.restore_btn"),
+            ("css", ".load_iframe_btn"),
+            ("css", ".restore_btn"),
+            ("css", "button.play_btn"),
+            ("xpath", "//button[contains(@class, 'load_iframe_btn') or contains(@class, 'restore_btn') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'run game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'play game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'restore game')]"),
+            ("xpath", "//a[contains(@class, 'load_iframe_btn') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'run game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'play game')]")
+        ]
+
+        btn = None
+        for stype, sel in play_selectors:
+            try:
+                if stype == "xpath":
+                    elements = driver.find_elements(By.XPATH, sel)
+                else:
+                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
+                for el in elements:
+                    if el.is_displayed():
+                        btn = el
+                        break
+                if btn:
+                    break
+            except Exception:
+                pass
+
+        if btn:
+            btn_text = btn.text.strip() or "Run Game"
+            add_log(f"[*] Đã tìm thấy nút chơi game ({btn_text}), đang tiến hành kích hoạt...")
+            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", btn)
+            time.sleep(1.0)
+            try:
+                btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn)
+
+            # Đợi iframe game load và server Itch.io nhận tín hiệu Browser Play
+            time.sleep(random.uniform(2.5, 4.0))
+
+            with bot_state["lock"]:
+                bot_state["play_count"] += 1
+            add_log("[🎮] Đã kích hoạt lượt Chơi Game (Browser Play) thành công!")
+            return True
+        else:
+            add_log("[-] Không tìm thấy nút Run/Play game hiển thị trên trang này.")
+            return False
+    except Exception as e:
+        err = str(e).splitlines()[0] if str(e).splitlines() else "Lỗi không xác định"
+        add_log(f"[!] Sự cố khi bấm nút Play: {err}")
         return False
 
 def inject_itchio_cookies(driver, cookie_raw):
@@ -477,12 +538,13 @@ def simulate_comment_action(driver, custom_comments=None, base_url=None):
         add_log(f"[!] Không thể gửi bình luận: {err}")
         return False
 
-def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment=False, custom_comments=None, cookies_list=None, proxies_list=None):
+def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment=False, custom_comments=None, cookies_list=None, proxies_list=None, do_play=True):
     add_log(f"[*] Bắt đầu chiến dịch: {url}")
+    pl_status = "Bật" if do_play else "Tắt"
     dl_status = "Bật" if do_download else "Tắt"
     cm_status = "Bật" if do_comment else "Tắt"
     ck_status = f"{len(cookies_list)} tài khoản" if (cookies_list and len(cookies_list) > 0) else "Chưa nạp"
-    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Download: {dl_status} | Comment: {cm_status} (Cookie: {ck_status})")
+    add_log(f"[*] Cấu hình: {total_sessions} views | Chờ: {min_wait}s - {max_wait}s | Play: {pl_status} | Download: {dl_status} | Comment: {cm_status} (Cookie: {ck_status})")
     if proxies_list:
         add_log(f"[*] Đã nạp danh sách {len(proxies_list)} Proxy xoay vòng IP.")
     else:
@@ -580,7 +642,11 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
             if do_comment and bot_state["is_running"]:
                 simulate_comment_action(driver, custom_comments, base_url=url)
 
-            # 2. Kích hoạt hành động bấm nút tải xuống SAU
+            # 2. Kích hoạt hành động bấm Run/Play game (HTML5/WebGL)
+            if do_play and bot_state["is_running"]:
+                simulate_play_action(driver)
+
+            # 3. Kích hoạt hành động bấm nút tải xuống SAU
             if do_download and bot_state["is_running"]:
                 simulate_download_action(driver)
 
@@ -642,7 +708,7 @@ def bot_worker(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, 
 
     with bot_state["lock"]:
         bot_state["is_running"] = False
-    add_log(f"[*] Hoàn tất chiến dịch! View thành công: {bot_state['success_count']} | Lượt tải: {bot_state['download_count']} | Bình luận: {bot_state['comment_count']} | Thất bại: {bot_state['fail_count']}")
+    add_log(f"[*] Hoàn tất chiến dịch! View thành công: {bot_state['success_count']} | Lượt chơi: {bot_state['play_count']} | Lượt tải: {bot_state['download_count']} | Bình luận: {bot_state['comment_count']} | Thất bại: {bot_state['fail_count']}")
 
 @app.route("/")
 def index():
@@ -658,6 +724,7 @@ def get_status():
             "success_count": bot_state["success_count"],
             "fail_count": bot_state["fail_count"],
             "download_count": bot_state["download_count"],
+            "play_count": bot_state["play_count"],
             "comment_count": bot_state["comment_count"],
             "logs": bot_state["logs"]
         })
@@ -671,6 +738,7 @@ def start_campaign():
     max_wait = float(data.get("max_wait", 15.0))
     is_headless = bool(data.get("headless", True))
     do_scroll = bool(data.get("scroll", True))
+    do_play = bool(data.get("play", True))
     do_download = bool(data.get("download", True))
     do_comment = bool(data.get("comment", False))
     raw_comments = data.get("comments", "")
@@ -718,11 +786,12 @@ def start_campaign():
         bot_state["success_count"] = 0
         bot_state["fail_count"] = 0
         bot_state["download_count"] = 0
+        bot_state["play_count"] = 0
         bot_state["comment_count"] = 0
 
     threading.Thread(
         target=bot_worker,
-        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment, custom_comments, cookies_list, proxies_list),
+        args=(url, total_sessions, min_wait, max_wait, is_headless, do_scroll, do_download, do_comment, custom_comments, cookies_list, proxies_list, do_play),
         daemon=True
     ).start()
 

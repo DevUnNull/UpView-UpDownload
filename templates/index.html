@@ -399,6 +399,7 @@
             word-break: break-all;
         }
 
+        .log-entry.play { color: #38bdf8; font-weight: 600; }
         .log-entry.download { color: #c084fc; font-weight: 600; }
         .log-entry.comment { color: #f59e0b; font-weight: 600; }
         .log-entry.cookie { color: #38bdf8; font-weight: 600; }
@@ -447,6 +448,10 @@
             <div class="stat-card">
                 <div class="stat-label">Lượt Hoàn Tất</div>
                 <div id="statSuccess" class="stat-value success">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Lượt Chơi (Plays)</div>
+                <div id="statPlay" class="stat-value" style="color: #38bdf8;">0</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Lượt Tải (Downloads)</div>
@@ -512,6 +517,10 @@
                     <label class="checkbox-label">
                         <input type="checkbox" id="scroll" checked>
                         <span>Giả lập cuộn trang đọc bài (Human scroll)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="play" checked>
+                        <span style="color: #38bdf8; font-weight: 600;">🎮 Tự động bấm Play / Run Game (Tăng lượt chơi HTML5/WebGL)</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="download" checked>
@@ -614,6 +623,7 @@
                 // Cập nhật số liệu
                 document.getElementById('statTotal').innerText = data.total_views;
                 document.getElementById('statSuccess').innerText = data.success_count;
+                document.getElementById('statPlay').innerText = data.play_count || 0;
                 document.getElementById('statDownload').innerText = data.download_count || 0;
                 document.getElementById('statComment').innerText = data.comment_count || 0;
                 document.getElementById('statFail').innerText = data.fail_count;
@@ -652,7 +662,8 @@
                     data.logs.forEach(msg => {
                         const div = document.createElement('div');
                         div.className = 'log-entry';
-                        if (msg.includes('[📥]')) div.className += ' download';
+                        if (msg.includes('[🎮]')) div.className += ' play';
+                        else if (msg.includes('[📥]')) div.className += ' download';
                         else if (msg.includes('[💬]')) div.className += ' comment';
                         else if (msg.includes('[🍪]')) div.className += ' cookie';
                         else if (msg.includes('[⚠️]')) div.className += ' warn';
@@ -677,6 +688,7 @@
             const maxWait = parseFloat(document.getElementById('maxWait').value);
             const headless = document.getElementById('headless').checked;
             const scroll = document.getElementById('scroll').checked;
+            const play = document.getElementById('play') ? document.getElementById('play').checked : true;
             const download = document.getElementById('download') ? document.getElementById('download').checked : true;
             const comment = document.getElementById('comment') ? document.getElementById('comment').checked : false;
             const comments = document.getElementById('comments') ? document.getElementById('comments').value.trim() : '';
@@ -707,6 +719,7 @@
                         max_wait: maxWait,
                         headless: headless,
                         scroll: scroll,
+                        play: play,
                         download: download,
                         comment: comment,
                         comments: comments,

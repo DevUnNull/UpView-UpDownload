@@ -131,6 +131,60 @@ def simulate_download_action(driver):
         print(f"[!] Lỗi khi click nút Download: {str(e).splitlines()[0]}")
         return False
 
+def simulate_play_action(driver):
+    """
+    Tự động định vị và click nút Run Game / Play Game / Restore Game trên Itch.io hoặc web HTML5:
+    1. Tìm các nút Run game / Restore game (.load_iframe_btn, .restore_btn, icon_play, etc.)
+    2. Cuộn tới nút và click mượt mà (hỗ trợ JS click fallback).
+    3. Đợi iframe game (#game_drop / iframe) tải để server Itch.io ghi nhận lượt chơi (Browser Play).
+    """
+    try:
+        play_selectors = [
+            ("css", "button.load_iframe_btn"),
+            ("css", "button.restore_btn"),
+            ("css", ".load_iframe_btn"),
+            ("css", ".restore_btn"),
+            ("css", "button.play_btn"),
+            ("xpath", "//button[contains(@class, 'load_iframe_btn') or contains(@class, 'restore_btn') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'run game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'play game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'restore game')]"),
+            ("xpath", "//a[contains(@class, 'load_iframe_btn') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'run game') or contains(translate(text(), 'RUNPLAYRESTORE', 'runplayrestore'), 'play game')]")
+        ]
+
+        btn = None
+        for stype, sel in play_selectors:
+            try:
+                if stype == "xpath":
+                    elements = driver.find_elements(By.XPATH, sel)
+                else:
+                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
+                for el in elements:
+                    if el.is_displayed():
+                        btn = el
+                        break
+                if btn:
+                    break
+            except Exception:
+                pass
+
+        if btn:
+            btn_text = btn.text.strip() or "Run Game"
+            print(f"[*] Đã tìm thấy nút chơi game ({btn_text}), đang kích hoạt...")
+            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", btn)
+            time.sleep(1.0)
+            try:
+                btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn)
+
+            # Đợi iframe game load và server Itch.io nhận tín hiệu Browser Play
+            time.sleep(random.uniform(2.5, 4.0))
+            print("[🎮] Đã kích hoạt lượt Chơi Game (Browser Play) thành công!")
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(f"[!] Lỗi khi bấm nút Play: {str(e).splitlines()[0]}")
+        return False
+
 # Danh sách bình luận mẫu cho Itch.io
 SAMPLE_COMMENTS = [
     "Game rất hay và cuốn hút! Chúc dự án phát triển tốt nhé.",
@@ -485,18 +539,19 @@ def create_driver(headless=True, proxy=None, temp_dl_dir=None):
     driver.set_window_size(width, height)
     return driver
 
-def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_comment=False, custom_comments=None, cookie=None, max_retries_per_session=2):
+def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_comment=False, custom_comments=None, cookie=None, max_retries_per_session=2, do_play=True):
     """
     Chạy vòng lặp giả lập trình duyệt xem trang web kèm cơ chế tự động thử lại khi có sự cố mạng.
     """
     print(f"[*] Mục tiêu: {url}")
     print(f"[*] Tổng số phiên (views) cấu hình: {total_sessions}")
     print(f"[*] Thời gian xem mỗi phiên: {min_wait}s - {max_wait}s")
-    print(f"[*] Chế độ: Download={'Bật' if do_download else 'Tắt'} | Comment={'Bật' if do_comment else 'Tắt'}\n")
+    print(f"[*] Chế độ: Play={'Bật' if do_play else 'Tắt'} | Download={'Bật' if do_download else 'Tắt'} | Comment={'Bật' if do_comment else 'Tắt'}\n")
     print("-" * 60)
 
     success_count = 0
     fail_count = 0
+    play_count = 0
 
     for i in range(1, total_sessions + 1):
         session_success = False
@@ -523,6 +578,10 @@ def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_c
 
                 if do_comment:
                     simulate_comment_action(driver, custom_comments, base_url=url)
+
+                if do_play:
+                    if simulate_play_action(driver):
+                        play_count += 1
 
                 if do_download:
                     simulate_download_action(driver)
@@ -569,7 +628,7 @@ def run_view_bot(url, total_sessions, min_wait, max_wait, do_download=True, do_c
 
     print("-" * 60)
     print(f"[*] Hoàn thành toàn bộ chiến dịch.")
-    print(f"[*] Thành công: {success_count} | Thất bại: {fail_count}")
+    print(f"[*] Thành công: {success_count} | Lượt chơi: {play_count} | Thất bại: {fail_count}")
 
 if __name__ == "__main__":
     # --- CẤU HÌNH THÔNG SỐ MẶC ĐỊNH ---
